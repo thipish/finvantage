@@ -1,14 +1,33 @@
-// Credit scoring engine - simulates ML model predictions
+// FinVantage 360 - Credit & Financial Health Engine
 
-export interface CreditInput {
+export interface ProfileInput {
+  // Tab 1: Personal
+  fullName: string;
   age: number;
+  dependents: number;
+  maritalStatus: "Single" | "Married" | "Divorced" | "Widowed";
+  employmentLength: "<1" | "1-3" | "3-5" | "5-10" | "10+";
   homeOwnership: "RENT" | "OWN" | "MORTGAGE";
-  employmentLength: number;
+
+  // Tab 2: Financial Health
   annualIncome: number;
+  monthlyDebt: number;
+  totalInvestments: number;
+  bankBalance: number;
+
+  // Tab 3: Loan Requirement
   loanAmount: number;
+  loanPurpose: "Business" | "Education" | "Home" | "Personal" | "Medical" | "Auto";
   interestRate: number;
-  loanGrade: "A" | "B" | "C" | "D" | "E" | "F" | "G";
-  defaultHistory: boolean;
+  loanTermMonths: number;
+}
+
+export interface HealthMetrics {
+  dtiRatio: number; // Debt-to-Income
+  dtiStatus: "Healthy" | "Moderate" | "Stressed";
+  wealthCoverage: number; // (Investments + Balance) / Loan
+  wealthStatus: "Strong" | "Adequate" | "Weak";
+  monthlySurplus: number;
 }
 
 export interface CreditResult {
@@ -16,13 +35,18 @@ export interface CreditResult {
   maxScore: number;
   probabilityOfDefault: number;
   status: "Excellent" | "Good" | "Risky";
-  approved: boolean;
+  approvalProbability: "High" | "Medium" | "Low";
+  healthMetrics: HealthMetrics;
   breakdown: { category: string; points: number; maxPoints: number }[];
+  profile: ProfileInput;
 }
 
-// Scorecard-based credit scoring (simulates df_scorecard.csv lookup)
-const scorecard: Record<string, (input: CreditInput) => number> = {
-  "Age": (i) => {
+const empYearsMap: Record<string, number> = {
+  "<1": 0.5, "1-3": 2, "3-5": 4, "5-10": 7, "10+": 12,
+};
+
+const scorecard: Record<string, (input: ProfileInput) => number> = {
+  Age: (i) => {
     if (i.age >= 35) return 85;
     if (i.age >= 28) return 70;
     if (i.age >= 22) return 55;
@@ -33,20 +57,21 @@ const scorecard: Record<string, (input: CreditInput) => number> = {
     if (i.homeOwnership === "MORTGAGE") return 70;
     return 40;
   },
-  "Employment": (i) => {
-    if (i.employmentLength >= 10) return 95;
-    if (i.employmentLength >= 5) return 75;
-    if (i.employmentLength >= 2) return 55;
+  Employment: (i) => {
+    const yrs = empYearsMap[i.employmentLength] ?? 2;
+    if (yrs >= 10) return 95;
+    if (yrs >= 5) return 75;
+    if (yrs >= 2) return 55;
     return 30;
   },
-  "Income": (i) => {
+  Income: (i) => {
     if (i.annualIncome >= 100000) return 100;
     if (i.annualIncome >= 60000) return 80;
     if (i.annualIncome >= 35000) return 60;
     return 35;
   },
-  "Loan Amount": (i) => {
-    const ratio = i.loanAmount / i.annualIncome;
+  "Loan-to-Income": (i) => {
+    const ratio = i.loanAmount / Math.max(i.annualIncome, 1);
     if (ratio < 0.2) return 95;
     if (ratio < 0.4) return 75;
     if (ratio < 0.6) return 55;
@@ -58,32 +83,57 @@ const scorecard: Record<string, (input: CreditInput) => number> = {
     if (i.interestRate < 18) return 45;
     return 25;
   },
-  "Loan Grade": (i) => {
-    const grades: Record<string, number> = { A: 100, B: 85, C: 65, D: 50, E: 35, F: 20, G: 10 };
-    return grades[i.loanGrade] || 50;
+  "Debt Burden": (i) => {
+    const dti = (i.monthlyDebt * 12) / Math.max(i.annualIncome, 1);
+    if (dti < 0.2) return 95;
+    if (dti < 0.35) return 70;
+    if (dti < 0.5) return 45;
+    return 20;
   },
-  "Default History": (i) => (i.defaultHistory ? 10 : 95),
+  "Financial Buffer": (i) => {
+    const buffer = (i.totalInvestments + i.bankBalance) / Math.max(i.loanAmount, 1);
+    if (buffer >= 1) return 95;
+    if (buffer >= 0.5) return 70;
+    if (buffer >= 0.2) return 45;
+    return 20;
+  },
 };
 
-const MAX_POINTS_PER_CATEGORY = 100;
+const MAX_PTS = 100;
 
-export function calculateCreditScore(input: CreditInput): CreditResult {
+function computeHealthMetrics(input: ProfileInput): HealthMetrics {
+  const monthlyIncome = input.annualIncome / 12;
+  const dtiRatio = Math.round((input.monthlyDebt / Math.max(monthlyIncome, 1)) * 100);
+  const wealthCoverage = Math.round(((input.totalInvestments + input.bankBalance) / Math.max(input.loanAmount, 1)) * 100);
+  const monthlySurplus = Math.round(monthlyIncome - input.monthlyDebt);
+
+  let dtiStatus: HealthMetrics["dtiStatus"];
+  if (dtiRatio <= 30) dtiStatus = "Healthy";
+  else if (dtiRatio <= 50) dtiStatus = "Moderate";
+  else dtiStatus = "Stressed";
+
+  let wealthStatus: HealthMetrics["wealthStatus"];
+  if (wealthCoverage >= 80) wealthStatus = "Strong";
+  else if (wealthCoverage >= 40) wealthStatus = "Adequate";
+  else wealthStatus = "Weak";
+
+  return { dtiRatio, dtiStatus, wealthCoverage, wealthStatus, monthlySurplus };
+}
+
+export function calculateCreditScore(input: ProfileInput): CreditResult {
   const categories = Object.keys(scorecard);
-  const breakdown = categories.map((category) => ({
-    category,
-    points: scorecard[category](input),
-    maxPoints: MAX_POINTS_PER_CATEGORY,
+  const breakdown = categories.map((cat) => ({
+    category: cat,
+    points: scorecard[cat](input),
+    maxPoints: MAX_PTS,
   }));
 
-  const totalPoints = breakdown.reduce((sum, b) => sum + b.points, 0);
-  const maxTotal = categories.length * MAX_POINTS_PER_CATEGORY;
+  const total = breakdown.reduce((s, b) => s + b.points, 0);
+  const maxTotal = categories.length * MAX_PTS;
+  const score = Math.round(300 + (total / maxTotal) * 550);
 
-  // Map to 300-850 range
-  const score = Math.round(300 + (totalPoints / maxTotal) * 550);
-
-  // Simulate logistic regression PD
-  const normalizedScore = (score - 300) / 550;
-  const logit = -3.5 + (1 - normalizedScore) * 7;
+  const norm = (score - 300) / 550;
+  const logit = -3.5 + (1 - norm) * 7;
   const probabilityOfDefault = Math.round((1 / (1 + Math.exp(-logit))) * 100);
 
   let status: CreditResult["status"];
@@ -91,7 +141,12 @@ export function calculateCreditScore(input: CreditInput): CreditResult {
   else if (score >= 550) status = "Good";
   else status = "Risky";
 
-  const approved = probabilityOfDefault < 20;
+  let approvalProbability: CreditResult["approvalProbability"];
+  if (probabilityOfDefault < 15) approvalProbability = "High";
+  else if (probabilityOfDefault < 35) approvalProbability = "Medium";
+  else approvalProbability = "Low";
 
-  return { score, maxScore: 850, probabilityOfDefault, status, approved, breakdown };
+  const healthMetrics = computeHealthMetrics(input);
+
+  return { score, maxScore: 850, probabilityOfDefault, status, approvalProbability, healthMetrics, breakdown, profile: input };
 }

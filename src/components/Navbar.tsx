@@ -1,12 +1,12 @@
 import { Link, useLocation } from "react-router-dom";
-import { Shield, TrendingUp } from "lucide-react";
+import { Shield, TrendingUp, LayoutDashboard } from "lucide-react";
 
 const Navbar = () => {
   const location = useLocation();
 
   const links = [
-    { to: "/", label: "Risk Assessment", icon: Shield },
-    { to: "/invest", label: "Investment Tools", icon: TrendingUp },
+    { to: "/assessment", label: "Risk Assessment", icon: Shield },
+    { to: "/wealth-tools", label: "Wealth Builder", icon: TrendingUp },
   ];
 
   return (
@@ -14,10 +14,11 @@ const Navbar = () => {
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         <Link to="/" className="flex items-center gap-2.5">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl gradient-primary">
-            <Shield className="h-5 w-5 text-primary-foreground" />
+            <LayoutDashboard className="h-5 w-5 text-primary-foreground" />
           </div>
           <span className="font-heading text-xl font-bold text-foreground">
-            Fin<span className="text-primary">Score</span>
+            Fin<span className="text-primary">Vantage</span>
+            <span className="ml-1 text-xs font-medium text-muted-foreground">360</span>
           </span>
         </Link>
 
