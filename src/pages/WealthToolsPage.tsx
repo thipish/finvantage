@@ -2,8 +2,7 @@ import { useState, useMemo } from "react";
 import { TrendingUp } from "lucide-react";
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
-const formatCurrency = (n: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
+import { formatCurrency } from "@/lib/formatCurrency";
 
 const WealthToolsPage = () => {
   const [monthly, setMonthly] = useState(5000);
@@ -76,7 +75,7 @@ const WealthToolsPage = () => {
               fontSize={12}
             />
             <YAxis
-              tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
+              tickFormatter={(v) => `₹${(v / 1000).toFixed(0)}k`}
               stroke="hsl(var(--muted-foreground))"
               fontSize={12}
             />
@@ -132,8 +131,8 @@ const WealthToolsPage = () => {
               className="w-full accent-primary"
             />
             <div className="mt-1 flex justify-between text-xs text-muted-foreground">
-              <span>$500</span>
-              <span>$100,000</span>
+              <span>₹500</span>
+              <span>₹1,00,000</span>
             </div>
           </div>
 
