@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { calculateCreditScore, type ProfileInput } from "@/lib/creditEngine";
+import { formatCurrency } from "@/lib/formatCurrency";
+import NumberInput from "@/components/NumberInput";
 import { Shield, ChevronRight, ChevronLeft, User, DollarSign, FileText } from "lucide-react";
 
 const STEPS = [
@@ -25,9 +27,6 @@ const defaultForm: ProfileInput = {
   interestRate: 11,
   loanTermMonths: 36,
 };
-
-const formatCurrency = (n: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
 
 const InputField = ({
   label,
@@ -84,7 +83,6 @@ const AssessmentPage = () => {
   const submit = () => {
     if (!validate()) return;
     const result = calculateCreditScore(form);
-    // Store in sessionStorage for the report page
     sessionStorage.setItem("finvantage_result", JSON.stringify(result));
     navigate("/report");
   };
@@ -144,10 +142,9 @@ const AssessmentPage = () => {
 
             <div className="grid grid-cols-2 gap-4">
               <InputField label="Age">
-                <input
-                  type="number"
+                <NumberInput
                   value={form.age}
-                  onChange={(e) => update("age", Number(e.target.value))}
+                  onChange={(v) => update("age", v)}
                   min={18}
                   max={100}
                   className={textInput}
@@ -155,10 +152,9 @@ const AssessmentPage = () => {
                 <ErrorMsg field="age" />
               </InputField>
               <InputField label="Dependents">
-                <input
-                  type="number"
+                <NumberInput
                   value={form.dependents}
-                  onChange={(e) => update("dependents", Number(e.target.value))}
+                  onChange={(v) => update("dependents", v)}
                   min={0}
                   max={20}
                   className={textInput}
@@ -220,41 +216,37 @@ const AssessmentPage = () => {
 
         {step === 1 && (
           <div className="space-y-5">
-            <InputField label="Annual Income ($)">
-              <input
-                type="number"
+            <InputField label="Annual Income (₹)">
+              <NumberInput
                 value={form.annualIncome}
-                onChange={(e) => update("annualIncome", Number(e.target.value))}
+                onChange={(v) => update("annualIncome", v)}
                 className={textInput}
               />
               <ErrorMsg field="annualIncome" />
             </InputField>
 
-            <InputField label="Total Monthly Debt / EMI ($)">
-              <input
-                type="number"
+            <InputField label="Total Monthly Debt / EMI (₹)">
+              <NumberInput
                 value={form.monthlyDebt}
-                onChange={(e) => update("monthlyDebt", Number(e.target.value))}
+                onChange={(v) => update("monthlyDebt", v)}
                 className={textInput}
               />
               <ErrorMsg field="monthlyDebt" />
             </InputField>
 
-            <InputField label="Total Investments (Stocks/SIPs/Gold) ($)">
-              <input
-                type="number"
+            <InputField label="Total Investments (Stocks/SIPs/Gold) (₹)">
+              <NumberInput
                 value={form.totalInvestments}
-                onChange={(e) => update("totalInvestments", Number(e.target.value))}
+                onChange={(v) => update("totalInvestments", v)}
                 className={textInput}
               />
               <ErrorMsg field="totalInvestments" />
             </InputField>
 
-            <InputField label="Primary Bank Balance ($)">
-              <input
-                type="number"
+            <InputField label="Primary Bank Balance (₹)">
+              <NumberInput
                 value={form.bankBalance}
-                onChange={(e) => update("bankBalance", Number(e.target.value))}
+                onChange={(v) => update("bankBalance", v)}
                 className={textInput}
               />
               <ErrorMsg field="bankBalance" />
@@ -288,8 +280,8 @@ const AssessmentPage = () => {
                 className="w-full accent-primary"
               />
               <div className="mt-1 flex justify-between text-xs text-muted-foreground">
-                <span>$1,000</span>
-                <span>$500,000</span>
+                <span>₹1,000</span>
+                <span>₹5,00,000</span>
               </div>
               <ErrorMsg field="loanAmount" />
             </InputField>
@@ -308,21 +300,19 @@ const AssessmentPage = () => {
 
             <div className="grid grid-cols-2 gap-4">
               <InputField label="Interest Rate (%)">
-                <input
-                  type="number"
-                  step={0.5}
+                <NumberInput
                   value={form.interestRate}
-                  onChange={(e) => update("interestRate", Number(e.target.value))}
+                  onChange={(v) => update("interestRate", v)}
+                  step={0.5}
                   className={textInput}
                 />
                 <ErrorMsg field="interestRate" />
               </InputField>
 
               <InputField label="Loan Term (Months)">
-                <input
-                  type="number"
+                <NumberInput
                   value={form.loanTermMonths}
-                  onChange={(e) => update("loanTermMonths", Number(e.target.value))}
+                  onChange={(v) => update("loanTermMonths", v)}
                   min={6}
                   max={360}
                   className={textInput}

@@ -1,7 +1,14 @@
 import { Link, useLocation } from "react-router-dom";
-import { Shield, TrendingUp, LayoutDashboard } from "lucide-react";
+import { Shield, TrendingUp, LayoutDashboard, LogOut } from "lucide-react";
+import ThemeToggle from "@/components/ThemeToggle";
+import { Button } from "@/components/ui/button";
 
-const Navbar = () => {
+interface NavbarProps {
+  user: { name: string; email: string };
+  onLogout: () => void;
+}
+
+const Navbar = ({ user, onLogout }: NavbarProps) => {
   const location = useLocation();
 
   const links = [
@@ -10,7 +17,7 @@ const Navbar = () => {
   ];
 
   return (
-    <nav className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-xl">
+    <nav className="sticky top-0 z-50 border-b border-border/50 bg-card/70 backdrop-blur-xl">
       <div className="container mx-auto flex h-16 items-center justify-between px-4">
         <Link to="/" className="flex items-center gap-2.5">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl gradient-primary">
@@ -40,6 +47,17 @@ const Navbar = () => {
               </Link>
             );
           })}
+
+          <ThemeToggle />
+
+          <div className="ml-2 flex items-center gap-2">
+            <span className="hidden text-sm font-medium text-muted-foreground sm:inline">
+              {user.name}
+            </span>
+            <Button variant="ghost" size="icon" onClick={onLogout} className="rounded-xl text-muted-foreground hover:text-foreground">
+              <LogOut className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
       </div>
     </nav>

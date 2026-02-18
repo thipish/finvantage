@@ -14,8 +14,7 @@ import {
   User,
 } from "lucide-react";
 
-const formatCurrency = (n: number) =>
-  new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
+import { formatCurrency } from "@/lib/formatCurrency";
 
 const approvalConfig = {
   High: { icon: CheckCircle, color: "text-success", bg: "bg-success/10", label: "High Approval Probability" },
