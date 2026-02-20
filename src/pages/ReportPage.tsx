@@ -12,6 +12,7 @@ import {
   TrendingDown,
   ShieldCheck,
   User,
+  Sparkles,
 } from "lucide-react";
 
 import { formatCurrency } from "@/lib/formatCurrency";
@@ -33,6 +34,65 @@ const wealthConfig = {
   Adequate: { color: "text-warning", bg: "bg-warning/10" },
   Weak: { color: "text-danger", bg: "bg-danger/10" },
 };
+
+function generateAIInsights(profile: CreditResult["profile"]): string[] {
+  const tips: string[] = [];
+  const { cibilScore, loanAmount, annualIncome, monthlyDebt, interestRate, loanTermMonths } = profile;
+  const monthlyIncome = annualIncome / 12;
+
+  // CIBIL-based tips
+  if (cibilScore < 600) {
+    tips.push(
+      `Your CIBIL score of ${cibilScore} is in the "Poor" range. Focus on timely bill payments and reducing credit utilisation to improve your score before applying for large loans.`
+    );
+  } else if (cibilScore < 700) {
+    tips.push(
+      `With a CIBIL score of ${cibilScore}, you're in the "Fair" range. Clearing existing dues and avoiding new credit inquiries over the next 6 months could push you into the "Good" tier.`
+    );
+  } else if (cibilScore >= 750) {
+    tips.push(
+      `Excellent CIBIL score of ${cibilScore}! You qualify for the best interest rates. Consider negotiating a rate reduction with your lender.`
+    );
+  }
+
+  // Loan-to-income tip
+  if (loanAmount > annualIncome * 10) {
+    tips.push(
+      `Your requested loan of ${formatCurrency(loanAmount)} is more than 10× your annual income. Consider a longer tenure or adding a co-applicant to reduce per-month EMI pressure.`
+    );
+  }
+
+  // DTI tip
+  const dti = (monthlyDebt / Math.max(monthlyIncome, 1)) * 100;
+  if (dti > 40) {
+    tips.push(
+      `Your Debt-to-Income ratio is ${Math.round(dti)}%, which is above the recommended 40%. Paying off smaller debts first (debt avalanche method) can free up cash flow and improve approval odds.`
+    );
+  }
+
+  // Interest rate tip
+  if (interestRate > 14) {
+    tips.push(
+      `The requested interest rate of ${interestRate}% is on the higher side. Compare offers from 3-4 lenders or consider a secured loan to bring the rate below 12%.`
+    );
+  }
+
+  // Tenure tip
+  if (loanTermMonths < 24 && loanAmount > 500000) {
+    tips.push(
+      `A ${loanTermMonths}-month tenure for ${formatCurrency(loanAmount)} will result in high monthly EMIs. Extending to 36-48 months may improve your debt serviceability ratio.`
+    );
+  }
+
+  // Fallback positive tip
+  if (tips.length === 0) {
+    tips.push(
+      `Your financial profile looks healthy! Continue maintaining timely repayments and growing your investments to unlock premium loan products in the future.`
+    );
+  }
+
+  return tips.slice(0, 4);
+}
 
 const ReportPage = () => {
   const navigate = useNavigate();
@@ -172,7 +232,7 @@ const ReportPage = () => {
       <div className="mt-6 card-elevated p-8 animate-fade-in-up" style={{ animationDelay: "0.25s" }}>
         <div className="mb-4 flex items-center gap-2">
           <BarChart3 className="h-5 w-5 text-primary" />
-          <h2 className="font-heading text-lg font-bold text-foreground">Score Breakdown (8 Dimensions)</h2>
+          <h2 className="font-heading text-lg font-bold text-foreground">Score Breakdown (9 Dimensions)</h2>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           {result.breakdown.map((b) => {
@@ -197,6 +257,35 @@ const ReportPage = () => {
             );
           })}
         </div>
+      </div>
+
+      {/* AI Financial Insights */}
+      <div className="mt-6 card-elevated p-8 animate-fade-in-up" style={{ animationDelay: "0.35s" }}>
+        <div className="mb-5 flex items-center gap-3">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl gradient-primary shadow-glow">
+            <Sparkles className="h-4 w-4 text-primary-foreground" />
+          </div>
+          <div>
+            <h2 className="font-heading text-lg font-bold text-foreground">AI Financial Insights</h2>
+            <p className="text-xs text-muted-foreground">Personalised recommendations based on your profile</p>
+          </div>
+        </div>
+        <div className="space-y-3">
+          {generateAIInsights(profile).map((tip, idx) => (
+            <div
+              key={idx}
+              className="flex gap-3 rounded-xl border border-border bg-accent/30 px-4 py-3 transition-all hover:bg-accent/50"
+            >
+              <div className="mt-0.5 flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-primary/10">
+                <span className="text-xs font-bold text-primary">{idx + 1}</span>
+              </div>
+              <p className="text-sm leading-relaxed text-foreground">{tip}</p>
+            </div>
+          ))}
+        </div>
+        <p className="mt-4 text-center text-xs text-muted-foreground">
+          ✨ AI-generated insights · Not financial advice · Consult a certified advisor for personalised guidance
+        </p>
       </div>
 
       {/* Actions */}
