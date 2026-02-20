@@ -8,6 +8,7 @@ export interface ProfileInput {
   maritalStatus: "Single" | "Married" | "Divorced" | "Widowed";
   employmentLength: "<1" | "1-3" | "3-5" | "5-10" | "10+";
   homeOwnership: "RENT" | "OWN" | "MORTGAGE";
+  cibilScore: number; // 300–900
 
   // Tab 2: Financial Health
   annualIncome: number;
@@ -46,6 +47,13 @@ const empYearsMap: Record<string, number> = {
 };
 
 const scorecard: Record<string, (input: ProfileInput) => number> = {
+  "CIBIL Score": (i) => {
+    if (i.cibilScore >= 750) return 100;
+    if (i.cibilScore >= 700) return 80;
+    if (i.cibilScore >= 650) return 60;
+    if (i.cibilScore >= 600) return 40;
+    return 20;
+  },
   Age: (i) => {
     if (i.age >= 35) return 85;
     if (i.age >= 28) return 70;

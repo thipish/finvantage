@@ -18,6 +18,7 @@ const defaultForm: ProfileInput = {
   maritalStatus: "Single",
   employmentLength: "3-5",
   homeOwnership: "RENT",
+  cibilScore: 700,
   annualIncome: 55000,
   monthlyDebt: 800,
   totalInvestments: 15000,
@@ -60,6 +61,7 @@ const AssessmentPage = () => {
       if (form.fullName.length > 100) e.fullName = "Max 100 characters";
       if (form.age < 18 || form.age > 100) e.age = "Age must be 18-100";
       if (form.dependents < 0 || form.dependents > 20) e.dependents = "Invalid";
+      if (form.cibilScore < 300 || form.cibilScore > 900) e.cibilScore = "CIBIL score must be 300-900";
     }
     if (step === 1) {
       if (form.annualIncome <= 0) e.annualIncome = "Must be positive";
@@ -162,6 +164,39 @@ const AssessmentPage = () => {
                 <ErrorMsg field="dependents" />
               </InputField>
             </div>
+
+            {/* CIBIL Score */}
+            <InputField label="CIBIL Score">
+              <NumberInput
+                value={form.cibilScore}
+                onChange={(v) => update("cibilScore", v)}
+                min={300}
+                max={900}
+                className={textInput}
+              />
+              <div className="mt-2 flex items-center gap-2">
+                <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full rounded-full transition-all duration-500"
+                    style={{
+                      width: `${((Math.min(Math.max(form.cibilScore, 300), 900) - 300) / 600) * 100}%`,
+                      background:
+                        form.cibilScore >= 750
+                          ? "hsl(var(--success))"
+                          : form.cibilScore >= 650
+                          ? "hsl(var(--warning))"
+                          : "hsl(var(--danger))",
+                    }}
+                  />
+                </div>
+                <span className={`text-xs font-semibold ${
+                  form.cibilScore >= 750 ? "text-success" : form.cibilScore >= 650 ? "text-warning" : "text-danger"
+                }`}>
+                  {form.cibilScore >= 750 ? "Excellent" : form.cibilScore >= 700 ? "Good" : form.cibilScore >= 650 ? "Fair" : form.cibilScore >= 600 ? "Poor" : "Very Poor"}
+                </span>
+              </div>
+              <ErrorMsg field="cibilScore" />
+            </InputField>
 
             <InputField label="Marital Status">
               <select
@@ -272,16 +307,16 @@ const AssessmentPage = () => {
             <InputField label={`Loan Amount: ${formatCurrency(form.loanAmount)}`}>
               <input
                 type="range"
-                min={1000}
-                max={500000}
-                step={1000}
+                min={10000}
+                max={10000000}
+                step={10000}
                 value={form.loanAmount}
                 onChange={(e) => update("loanAmount", Number(e.target.value))}
                 className="w-full accent-primary"
               />
               <div className="mt-1 flex justify-between text-xs text-muted-foreground">
-                <span>₹1,000</span>
-                <span>₹5,00,000</span>
+                <span>₹10,000</span>
+                <span>₹1,00,00,000 (1 Crore)</span>
               </div>
               <ErrorMsg field="loanAmount" />
             </InputField>
