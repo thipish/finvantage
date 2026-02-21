@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { calculateCreditScore, type ProfileInput } from "@/lib/creditEngine";
+import { predictCreditRisk } from "@/lib/api";
 import { formatCurrency } from "@/lib/formatCurrency";
 import NumberInput from "@/components/NumberInput";
 import { Shield, ChevronRight, ChevronLeft, User, DollarSign, FileText } from "lucide-react";
@@ -82,11 +83,23 @@ const AssessmentPage = () => {
     if (validate()) setStep((s) => s + 1);
   };
 
-  const submit = () => {
+  const [submitting, setSubmitting] = useState(false);
+
+  const submit = async () => {
     if (!validate()) return;
-    const result = calculateCreditScore(form);
-    sessionStorage.setItem("finvantage_result", JSON.stringify(result));
-    navigate("/report");
+    setSubmitting(true);
+    try {
+      const result = await predictCreditRisk(form);
+      sessionStorage.setItem("finvantage_result", JSON.stringify(result));
+      navigate("/report");
+    } catch {
+      // Final fallback
+      const result = calculateCreditScore(form);
+      sessionStorage.setItem("finvantage_result", JSON.stringify(result));
+      navigate("/report");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const ErrorMsg = ({ field }: { field: string }) =>
@@ -392,9 +405,10 @@ const AssessmentPage = () => {
           ) : (
             <button
               onClick={submit}
-              className="flex items-center gap-2 rounded-xl gradient-primary px-8 py-2.5 text-sm font-semibold text-primary-foreground shadow-glow transition-all hover:opacity-90"
+              disabled={submitting}
+              className="flex items-center gap-2 rounded-xl gradient-primary px-8 py-2.5 text-sm font-semibold text-primary-foreground shadow-glow transition-all hover:opacity-90 disabled:opacity-60"
             >
-              Generate Report
+              {submitting ? "Analyzing…" : "Generate Report"}
             </button>
           )}
         </div>
