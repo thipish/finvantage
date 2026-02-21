@@ -232,7 +232,7 @@ const ReportPage = () => {
       <div className="mt-6 card-elevated p-8 animate-fade-in-up" style={{ animationDelay: "0.25s" }}>
         <div className="mb-4 flex items-center gap-2">
           <BarChart3 className="h-5 w-5 text-primary" />
-          <h2 className="font-heading text-lg font-bold text-foreground">Score Breakdown (9 Dimensions)</h2>
+          <h2 className="font-heading text-lg font-bold text-foreground">ML Feature Importance (9 Dimensions)</h2>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           {result.breakdown.map((b) => {
