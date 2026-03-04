@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Shield, TrendingUp, LayoutDashboard, LogOut } from "lucide-react";
+import { Shield, TrendingUp, LayoutDashboard, History, LogOut } from "lucide-react";
 import ThemeToggle from "@/components/ThemeToggle";
 import { Button } from "@/components/ui/button";
 
@@ -14,6 +14,7 @@ const Navbar = ({ user, onLogout }: NavbarProps) => {
   const links = [
     { to: "/assessment", label: "Risk Assessment", icon: Shield },
     { to: "/wealth-tools", label: "Wealth Builder", icon: TrendingUp },
+    { to: "/history", label: "History", icon: History },
   ];
 
   return (

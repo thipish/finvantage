@@ -1,28 +1,34 @@
 """
 FinVantage ML Platform — FastAPI Backend
 =========================================
-Serves the trained Random Forest model and persists results in MySQL.
+Serves the trained Random Forest model, handles auth, and persists results in MySQL.
 
 Usage:
-    pip install fastapi uvicorn sqlalchemy pymysql joblib pandas numpy scikit-learn
+    pip install -r requirements.txt
     uvicorn app:app --reload --port 8000
 
 Endpoints:
-    POST /api/predict   — Run ML prediction on user profile
-    GET  /api/health    — Health check
+    POST /api/auth/register — Register a new user
+    POST /api/auth/login    — Login and receive JWT
+    POST /api/predict       — Run ML prediction (requires JWT)
+    GET  /api/history       — Fetch user's assessment history (requires JWT)
+    GET  /api/health        — Health check
 """
 
 import os
 import json
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import numpy as np
 import joblib
-from fastapi import FastAPI, HTTPException
+import bcrypt
+import jwt as pyjwt
+from fastapi import FastAPI, HTTPException, Depends, Security
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
-from sqlalchemy import create_engine, Column, Integer, String, Float, Text, Enum, DateTime, ForeignKey, JSON
+from fastapi.security import APIKeyHeader, HTTPBearer, HTTPAuthorizationCredentials
+from pydantic import BaseModel, Field, EmailStr
+from sqlalchemy import create_engine, Column, Integer, String, Float, Text, DateTime, ForeignKey, JSON, DECIMAL
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
 # ─── Configuration ───────────────────────────────────────────────────
@@ -33,6 +39,14 @@ if not DATABASE_URL:
 API_KEY = os.getenv("FINVANTAGE_API_KEY")
 if not API_KEY:
     raise RuntimeError("FINVANTAGE_API_KEY environment variable is required for endpoint authentication.")
+
+JWT_SECRET = os.getenv("JWT_SECRET")
+if not JWT_SECRET:
+    raise RuntimeError("JWT_SECRET environment variable is required. Generate with: openssl rand -hex 32")
+
+JWT_ALGORITHM = "HS256"
+JWT_EXPIRY_HOURS = 24
+
 MODEL_DIR = os.path.join(os.path.dirname(__file__), "models")
 
 # ─── Database Setup ──────────────────────────────────────────────────
@@ -41,9 +55,20 @@ SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
 Base = declarative_base()
 
 
+# ─── ORM Models ──────────────────────────────────────────────────────
+class AuthUserModel(Base):
+    __tablename__ = "auth_users"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    full_name = Column(String(100), nullable=False)
+    email = Column(String(255), unique=True, nullable=False)
+    password_hash = Column(String(255), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 class UserModel(Base):
     __tablename__ = "users"
     id = Column(Integer, primary_key=True, autoincrement=True)
+    auth_user_id = Column(Integer, ForeignKey("auth_users.id"), nullable=False)
     full_name = Column(String(100), nullable=False)
     age = Column(Integer, nullable=False)
     dependents = Column(Integer, default=0)
@@ -88,6 +113,23 @@ class RiskPredictionModel(Base):
     application = relationship("LoanApplicationModel", back_populates="predictions")
 
 
+class AssessmentHistoryModel(Base):
+    __tablename__ = "assessment_history"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    auth_user_id = Column(Integer, ForeignKey("auth_users.id"), nullable=False)
+    user_name = Column(String(100), nullable=False)
+    assessment_input = Column(JSON, nullable=False)
+    credit_score = Column(Integer, nullable=False)
+    probability_of_default = Column(Float, nullable=False)
+    approval_status = Column(String(10), nullable=False)
+    status_label = Column(String(20), nullable=False)
+    health_metrics = Column(JSON)
+    breakdown = Column(JSON)
+    ai_insights = Column(JSON)
+    prediction_id = Column(Integer)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 # ─── Load ML Artefacts ───────────────────────────────────────────────
 try:
     model = joblib.load(os.path.join(MODEL_DIR, "credit_risk_model.pkl"))
@@ -100,7 +142,7 @@ except FileNotFoundError:
     print("⚠️  ML model not found — run train_model.py first")
 
 # ─── FastAPI App ─────────────────────────────────────────────────────
-app = FastAPI(title="FinVantage ML API", version="2.0.0")
+app = FastAPI(title="FinVantage ML API", version="3.0.0")
 
 ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
 
@@ -109,14 +151,12 @@ app.add_middleware(
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["POST", "GET", "OPTIONS"],
-    allow_headers=["Content-Type", "X-API-Key"],
+    allow_headers=["Content-Type", "X-API-Key", "Authorization"],
 )
 
-
-from fastapi import Depends, Security
-from fastapi.security import APIKeyHeader
-
+# ─── Security Dependencies ───────────────────────────────────────────
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+bearer_scheme = HTTPBearer(auto_error=False)
 
 
 async def verify_api_key(key: str = Security(api_key_header)):
@@ -125,9 +165,51 @@ async def verify_api_key(key: str = Security(api_key_header)):
     return key
 
 
+def create_jwt(user_id: int, email: str, name: str) -> str:
+    payload = {
+        "sub": user_id,
+        "email": email,
+        "name": name,
+        "exp": datetime.utcnow() + timedelta(hours=JWT_EXPIRY_HOURS),
+        "iat": datetime.utcnow(),
+    }
+    return pyjwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
+
+
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Security(bearer_scheme),
+    _key: str = Depends(verify_api_key),
+):
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Missing authorization token")
+    try:
+        payload = pyjwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        return {"id": payload["sub"], "email": payload["email"], "name": payload["name"]}
+    except pyjwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except pyjwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+
 # ─── Request / Response Schemas ──────────────────────────────────────
+class RegisterPayload(BaseModel):
+    fullName: str = Field(min_length=1, max_length=100)
+    email: str = Field(min_length=5, max_length=255)
+    password: str = Field(min_length=8, max_length=128)
+
+
+class LoginPayload(BaseModel):
+    email: str = Field(min_length=5, max_length=255)
+    password: str = Field(min_length=1, max_length=128)
+
+
+class AuthResponse(BaseModel):
+    token: str
+    user: dict
+
+
 class ProfilePayload(BaseModel):
-    fullName: str
+    fullName: str = Field(min_length=1, max_length=100)
     age: int = Field(ge=18, le=100)
     dependents: int = Field(ge=0, le=20)
     maritalStatus: str
@@ -179,48 +261,108 @@ FEATURE_DISPLAY_NAMES = {
 
 
 def generate_ai_tips(payload: ProfilePayload, pd_pct: int) -> list[str]:
-    """Generate 3-4 actionable tips based on profile and prediction."""
     tips = []
     monthly_income = payload.annualIncome / 12
     dti = (payload.monthlyDebt / max(monthly_income, 1)) * 100
 
     if payload.cibilScore < 600:
-        tips.append(f"Your CIBIL score of {payload.cibilScore} is below 600. Focus on clearing overdue payments and keeping credit utilisation under 30% to improve it.")
+        tips.append(f"Your CIBIL score of {payload.cibilScore} is below 600. Focus on clearing overdue payments and keeping credit utilisation under 30%.")
     elif payload.cibilScore < 700:
-        tips.append(f"CIBIL score {payload.cibilScore} is in the 'Fair' range. Avoid new credit inquiries for 6 months and pay all bills on time to cross the 700+ threshold.")
+        tips.append(f"CIBIL score {payload.cibilScore} is 'Fair'. Avoid new credit inquiries for 6 months to cross the 700+ threshold.")
     elif payload.cibilScore >= 750:
-        tips.append(f"Excellent CIBIL score of {payload.cibilScore}! Negotiate a lower interest rate with your lender — you qualify for premium terms.")
+        tips.append(f"Excellent CIBIL score of {payload.cibilScore}! Negotiate a lower interest rate — you qualify for premium terms.")
 
     if dti > 40:
-        tips.append(f"Your DTI ratio is {dti:.0f}%. Consider the debt avalanche method — pay off high-interest debts first to bring it below 40%.")
+        tips.append(f"DTI ratio is {dti:.0f}%. Pay off high-interest debts first to bring it below 40%.")
 
     if payload.loanAmount > payload.annualIncome * 10:
-        tips.append(f"Loan amount is over 10x your annual income. A co-applicant or longer tenure could improve approval chances significantly.")
+        tips.append("Loan amount is over 10x income. A co-applicant or longer tenure could help.")
 
     if payload.interestRate > 14:
-        tips.append(f"At {payload.interestRate}% interest, compare at least 3 lender offers. A secured loan variant may cut the rate by 3-4%.")
+        tips.append(f"At {payload.interestRate}% interest, compare at least 3 lender offers.")
 
     if pd_pct < 15:
-        tips.append("Your default probability is low — maintain this by keeping emergency savings equal to 6 months of EMIs.")
+        tips.append("Default probability is low — keep emergency savings equal to 6 months of EMIs.")
 
-    return tips[:4] if tips else ["Your financial profile is healthy. Continue building your credit history and investment portfolio."]
+    return tips[:4] if tips else ["Your financial profile is healthy. Continue building credit history."]
 
 
-# ─── Endpoints ───────────────────────────────────────────────────────
+# ─── Auth Endpoints ──────────────────────────────────────────────────
+@app.post("/api/auth/register", response_model=AuthResponse)
+def register(payload: RegisterPayload, _key: str = Depends(verify_api_key)):
+    db = SessionLocal()
+    try:
+        existing = db.query(AuthUserModel).filter(AuthUserModel.email == payload.email).first()
+        if existing:
+            raise HTTPException(status_code=409, detail="Email already registered")
+
+        hashed = bcrypt.hashpw(payload.password.encode("utf-8"), bcrypt.gensalt())
+        user = AuthUserModel(
+            full_name=payload.fullName,
+            email=payload.email,
+            password_hash=hashed.decode("utf-8"),
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+        token = create_jwt(user.id, user.email, user.full_name)
+        return AuthResponse(
+            token=token,
+            user={"id": user.id, "name": user.full_name, "email": user.email},
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"Registration error: {e}")
+        raise HTTPException(status_code=500, detail="Registration failed. Please try again.")
+    finally:
+        db.close()
+
+
+@app.post("/api/auth/login", response_model=AuthResponse)
+def login(payload: LoginPayload, _key: str = Depends(verify_api_key)):
+    db = SessionLocal()
+    try:
+        user = db.query(AuthUserModel).filter(AuthUserModel.email == payload.email).first()
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+
+        if not bcrypt.checkpw(payload.password.encode("utf-8"), user.password_hash.encode("utf-8")):
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+
+        token = create_jwt(user.id, user.email, user.full_name)
+        return AuthResponse(
+            token=token,
+            user={"id": user.id, "name": user.full_name, "email": user.email},
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Login error: {e}")
+        raise HTTPException(status_code=500, detail="Login failed. Please try again.")
+    finally:
+        db.close()
+
+
+# ─── Health ──────────────────────────────────────────────────────────
 @app.get("/api/health")
 def health_check():
     return {"status": "ok", "model_loaded": model is not None}
 
 
+# ─── Predict Endpoint ───────────────────────────────────────────────
 @app.post("/api/predict", response_model=PredictionResponse)
-def predict(payload: ProfilePayload, _key: str = Depends(verify_api_key)):
+def predict(payload: ProfilePayload, current_user: dict = Depends(get_current_user)):
     if model is None:
         raise HTTPException(status_code=503, detail="ML model not loaded. Run train_model.py first.")
 
     db = SessionLocal()
     try:
-        # 1. Save user
+        # 1. Save user profile snapshot
         user = UserModel(
+            auth_user_id=current_user["id"],
             full_name=payload.fullName,
             age=payload.age,
             dependents=payload.dependents,
@@ -278,7 +420,7 @@ def predict(payload: ProfilePayload, _key: str = Depends(verify_api_key)):
         breakdown = []
         for fname, imp in zip(feature_names, importances):
             display = FEATURE_DISPLAY_NAMES.get(fname, fname)
-            points = int(round(imp * 100 * (1 - pd_proba) * 2))  # scale for display
+            points = int(round(imp * 100 * (1 - pd_proba) * 2))
             breakdown.append({"category": display, "points": min(points, 100), "maxPoints": 100})
         breakdown.sort(key=lambda x: -x["points"])
 
@@ -326,6 +468,23 @@ def predict(payload: ProfilePayload, _key: str = Depends(verify_api_key)):
             ai_insights=json.dumps(ai_tips),
         )
         db.add(prediction)
+        db.flush()
+
+        # 10. Save to assessment history
+        history = AssessmentHistoryModel(
+            auth_user_id=current_user["id"],
+            user_name=payload.fullName,
+            assessment_input=json.dumps(payload.dict()),
+            credit_score=credit_score,
+            probability_of_default=pd_pct,
+            approval_status=approval,
+            status_label=status,
+            health_metrics=json.dumps(health),
+            breakdown=json.dumps(breakdown),
+            ai_insights=json.dumps(ai_tips),
+            prediction_id=prediction.id,
+        )
+        db.add(history)
         db.commit()
 
         return PredictionResponse(
@@ -343,8 +502,45 @@ def predict(payload: ProfilePayload, _key: str = Depends(verify_api_key)):
 
     except Exception as e:
         db.rollback()
-        print(f"Prediction error: {e}")  # Log server-side only
+        print(f"Prediction error: {e}")
         raise HTTPException(status_code=500, detail="An internal error occurred. Please try again.")
+    finally:
+        db.close()
+
+
+# ─── History Endpoint ────────────────────────────────────────────────
+@app.get("/api/history")
+def get_history(current_user: dict = Depends(get_current_user)):
+    db = SessionLocal()
+    try:
+        records = (
+            db.query(AssessmentHistoryModel)
+            .filter(AssessmentHistoryModel.auth_user_id == current_user["id"])
+            .order_by(AssessmentHistoryModel.created_at.desc())
+            .limit(50)
+            .all()
+        )
+
+        return [
+            {
+                "id": r.id,
+                "userName": r.user_name,
+                "creditScore": r.credit_score,
+                "probabilityOfDefault": float(r.probability_of_default),
+                "approvalStatus": r.approval_status,
+                "statusLabel": r.status_label,
+                "healthMetrics": json.loads(r.health_metrics) if isinstance(r.health_metrics, str) else r.health_metrics,
+                "breakdown": json.loads(r.breakdown) if isinstance(r.breakdown, str) else r.breakdown,
+                "aiInsights": json.loads(r.ai_insights) if isinstance(r.ai_insights, str) else r.ai_insights,
+                "assessmentInput": json.loads(r.assessment_input) if isinstance(r.assessment_input, str) else r.assessment_input,
+                "predictionId": r.prediction_id,
+                "createdAt": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in records
+        ]
+    except Exception as e:
+        print(f"History error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load history.")
     finally:
         db.close()
 

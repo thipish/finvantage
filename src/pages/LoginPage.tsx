@@ -1,23 +1,47 @@
 import { useState } from "react";
-import { Shield } from "lucide-react";
+import { Shield, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface LoginPageProps {
-  onLogin: (name: string, email: string) => void;
+  onLogin: (email: string, password: string) => Promise<void>;
+  onRegister: (name: string, email: string, password: string) => Promise<void>;
 }
 
-const LoginPage = ({ onLogin }: LoginPageProps) => {
+const LoginPage = ({ onLogin, onRegister }: LoginPageProps) => {
   const [isSignup, setIsSignup] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) return;
-    onLogin(isSignup ? name : email.split("@")[0], email);
+    if (isSignup && !name.trim()) {
+      setError("Name is required");
+      return;
+    }
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters");
+      return;
+    }
+
+    setError("");
+    setSubmitting(true);
+    try {
+      if (isSignup) {
+        await onRegister(name, email, password);
+      } else {
+        await onLogin(email, password);
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Authentication failed");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -52,6 +76,7 @@ const LoginPage = ({ onLogin }: LoginPageProps) => {
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="Your full name"
+                    maxLength={100}
                     className="rounded-xl"
                   />
                 </div>
@@ -74,18 +99,34 @@ const LoginPage = ({ onLogin }: LoginPageProps) => {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
+                  minLength={8}
                   className="rounded-xl"
                   required
                 />
               </div>
-              <Button type="submit" className="w-full rounded-xl gradient-primary text-primary-foreground shadow-glow">
-                {isSignup ? "Create Account" : "Sign In"}
+
+              {error && (
+                <p className="text-sm text-destructive text-center">{error}</p>
+              )}
+
+              <Button
+                type="submit"
+                disabled={submitting}
+                className="w-full rounded-xl gradient-primary text-primary-foreground shadow-glow"
+              >
+                {submitting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : isSignup ? (
+                  "Create Account"
+                ) : (
+                  "Sign In"
+                )}
               </Button>
             </form>
             <p className="mt-4 text-center text-sm text-muted-foreground">
               {isSignup ? "Already have an account?" : "Don't have an account?"}{" "}
               <button
-                onClick={() => setIsSignup(!isSignup)}
+                onClick={() => { setIsSignup(!isSignup); setError(""); }}
                 className="font-medium text-primary hover:underline"
               >
                 {isSignup ? "Sign In" : "Sign Up"}
