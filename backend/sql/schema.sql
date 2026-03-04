@@ -5,6 +5,10 @@ CREATE DATABASE IF NOT EXISTS finvantage;
 USE finvantage;
 
 -- 1. Users table
+-- NOTE: In production, create separate MySQL users with least-privilege grants:
+--   GRANT SELECT, INSERT ON finvantage.* TO 'app_user'@'%';
+--   GRANT SELECT ON finvantage.risk_predictions TO 'readonly_user'@'%';
+
 CREATE TABLE IF NOT EXISTS users (
     id              INT AUTO_INCREMENT PRIMARY KEY,
     full_name       VARCHAR(100) NOT NULL,

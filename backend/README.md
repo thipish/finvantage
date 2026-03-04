@@ -19,9 +19,16 @@ python train_model.py
 ```
 This generates `models/credit_risk_model.pkl` and supporting artefacts.
 
-### 4. Configure database connection
+### 4. Configure environment variables
 ```bash
-export DATABASE_URL="mysql+pymysql://root:yourpassword@localhost:3306/finvantage"
+# Required — use a strong, unique password
+export DATABASE_URL="mysql+pymysql://your_user:YOUR_STRONG_PASSWORD@localhost:3306/finvantage"
+
+# Required — generate a random API key for frontend-backend auth
+export FINVANTAGE_API_KEY="$(openssl rand -hex 32)"
+
+# Optional — comma-separated list of allowed frontend origins
+export ALLOWED_ORIGINS="http://localhost:5173,https://finvantage.lovable.app"
 ```
 
 ### 5. Start the API server

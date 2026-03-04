@@ -8,6 +8,7 @@ import type { ProfileInput, CreditResult } from "./creditEngine";
 import { calculateCreditScore } from "./creditEngine";
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API_KEY = import.meta.env.VITE_API_KEY || "";
 
 export interface MLPredictionResult extends CreditResult {
   aiInsights: string[];
@@ -23,7 +24,10 @@ export async function predictCreditRisk(
   try {
     const res = await fetch(`${API_BASE_URL}/api/predict`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-API-Key": API_KEY,
+      },
       body: JSON.stringify(profile),
     });
 

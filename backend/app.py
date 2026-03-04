@@ -26,7 +26,13 @@ from sqlalchemy import create_engine, Column, Integer, String, Float, Text, Enum
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 
 # ─── Configuration ───────────────────────────────────────────────────
-DATABASE_URL = os.getenv("DATABASE_URL", "mysql+pymysql://root:password@localhost:3306/finvantage")
+DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    raise RuntimeError("DATABASE_URL environment variable is required. Example: mysql+pymysql://user:pass@host:3306/finvantage")
+
+API_KEY = os.getenv("FINVANTAGE_API_KEY")
+if not API_KEY:
+    raise RuntimeError("FINVANTAGE_API_KEY environment variable is required for endpoint authentication.")
 MODEL_DIR = os.path.join(os.path.dirname(__file__), "models")
 
 # ─── Database Setup ──────────────────────────────────────────────────
@@ -96,13 +102,27 @@ except FileNotFoundError:
 # ─── FastAPI App ─────────────────────────────────────────────────────
 app = FastAPI(title="FinVantage ML API", version="2.0.0")
 
+ALLOWED_ORIGINS = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["POST", "GET", "OPTIONS"],
+    allow_headers=["Content-Type", "X-API-Key"],
 )
+
+
+from fastapi import Depends, Security
+from fastapi.security import APIKeyHeader
+
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+async def verify_api_key(key: str = Security(api_key_header)):
+    if not key or key != API_KEY:
+        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+    return key
 
 
 # ─── Request / Response Schemas ──────────────────────────────────────
@@ -193,7 +213,7 @@ def health_check():
 
 
 @app.post("/api/predict", response_model=PredictionResponse)
-def predict(payload: ProfilePayload):
+def predict(payload: ProfilePayload, _key: str = Depends(verify_api_key)):
     if model is None:
         raise HTTPException(status_code=503, detail="ML model not loaded. Run train_model.py first.")
 
@@ -323,7 +343,8 @@ def predict(payload: ProfilePayload):
 
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"Prediction error: {e}")  # Log server-side only
+        raise HTTPException(status_code=500, detail="An internal error occurred. Please try again.")
     finally:
         db.close()
 
