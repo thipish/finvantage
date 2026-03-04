@@ -10,18 +10,19 @@ import LandingPage from "./pages/LandingPage";
 import AssessmentPage from "./pages/AssessmentPage";
 import ReportPage from "./pages/ReportPage";
 import WealthToolsPage from "./pages/WealthToolsPage";
+import HistoryPage from "./pages/HistoryPage";
 import LoginPage from "./pages/LoginPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
 const AppContent = () => {
-  const { user, loading, login, logout } = useAuth();
+  const { user, loading, login, register, logout } = useAuth();
 
   if (loading) return null;
 
   if (!user) {
-    return <LoginPage onLogin={login} />;
+    return <LoginPage onLogin={login} onRegister={register} />;
   }
 
   return (
@@ -32,6 +33,7 @@ const AppContent = () => {
         <Route path="/assessment" element={<AssessmentPage />} />
         <Route path="/report" element={<ReportPage />} />
         <Route path="/wealth-tools" element={<WealthToolsPage />} />
+        <Route path="/history" element={<HistoryPage />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </BrowserRouter>
