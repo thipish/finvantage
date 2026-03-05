@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
-import { History, TrendingUp, TrendingDown, AlertTriangle, Calendar } from "lucide-react";
+import { useEffect, useState, useMemo } from "react";
+import { History, TrendingUp, TrendingDown, AlertTriangle, Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 import { fetchHistory, type HistoryEntry } from "@/lib/api";
 import { formatCurrency } from "@/lib/formatCurrency";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -12,6 +13,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+
+const PAGE_SIZE = 10;
 
 const statusColor = (label: string) => {
   switch (label) {
@@ -81,6 +84,7 @@ const HistoryPage = () => {
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [page, setPage] = useState(1);
 
   useEffect(() => {
     const load = async () => {
@@ -96,6 +100,27 @@ const HistoryPage = () => {
     };
     load();
   }, []);
+
+  const totalPages = Math.max(1, Math.ceil(entries.length / PAGE_SIZE));
+  const paginatedEntries = useMemo(
+    () => entries.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [entries, page]
+  );
+
+  const goTo = (p: number) => {
+    setPage(Math.max(1, Math.min(p, totalPages)));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // Generate page numbers to display (max 5 around current)
+  const pageNumbers = useMemo(() => {
+    const pages: number[] = [];
+    let start = Math.max(1, page - 2);
+    let end = Math.min(totalPages, start + 4);
+    start = Math.max(1, end - 4);
+    for (let i = start; i <= end; i++) pages.push(i);
+    return pages;
+  }, [page, totalPages]);
 
   return (
     <div className="container mx-auto max-w-5xl px-4 py-12">
@@ -145,35 +170,77 @@ const HistoryPage = () => {
 
       {/* History Table */}
       {!loading && entries.length > 0 && (
-        <Card className="border-border/50 shadow-elevated overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-muted/50">
-                <TableHead className="font-semibold">User Name</TableHead>
-                <TableHead className="font-semibold">Date Taken</TableHead>
-                <TableHead className="font-semibold">Report Summary</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {entries.map((entry) => (
-                <TableRow key={entry.id} className="hover:bg-accent/30 transition-colors">
-                  <TableCell className="font-medium text-foreground whitespace-nowrap align-top pt-4">
-                    {entry.userName}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-muted-foreground align-top pt-4">
-                    <div className="flex items-center gap-1.5">
-                      <Calendar className="h-3.5 w-3.5" />
-                      {formatDate(entry.createdAt)}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <ReportSummary entry={entry} />
-                  </TableCell>
+        <>
+          <Card className="border-border/50 shadow-elevated overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-muted/50">
+                  <TableHead className="font-semibold">User Name</TableHead>
+                  <TableHead className="font-semibold">Date Taken</TableHead>
+                  <TableHead className="font-semibold">Report Summary</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </Card>
+              </TableHeader>
+              <TableBody>
+                {paginatedEntries.map((entry) => (
+                  <TableRow key={entry.id} className="hover:bg-accent/30 transition-colors">
+                    <TableCell className="font-medium text-foreground whitespace-nowrap align-top pt-4">
+                      {entry.userName}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground align-top pt-4">
+                      <div className="flex items-center gap-1.5">
+                        <Calendar className="h-3.5 w-3.5" />
+                        {formatDate(entry.createdAt)}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <ReportSummary entry={entry} />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </Card>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="mt-6 flex items-center justify-between">
+              <p className="text-sm text-muted-foreground">
+                Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, entries.length)} of {entries.length}
+              </p>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8 rounded-lg"
+                  disabled={page === 1}
+                  onClick={() => goTo(page - 1)}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                {pageNumbers.map((p) => (
+                  <Button
+                    key={p}
+                    variant={p === page ? "default" : "outline"}
+                    size="icon"
+                    className={`h-8 w-8 rounded-lg text-xs ${p === page ? "shadow-glow" : ""}`}
+                    onClick={() => goTo(p)}
+                  >
+                    {p}
+                  </Button>
+                ))}
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8 rounded-lg"
+                  disabled={page === totalPages}
+                  onClick={() => goTo(page + 1)}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
