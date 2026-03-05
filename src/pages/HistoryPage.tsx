@@ -1,9 +1,17 @@
 import { useEffect, useState } from "react";
-import { History, TrendingUp, TrendingDown, AlertTriangle, Calendar, User, ChevronDown, ChevronUp } from "lucide-react";
+import { History, TrendingUp, TrendingDown, AlertTriangle, Calendar } from "lucide-react";
 import { fetchHistory, type HistoryEntry } from "@/lib/api";
 import { formatCurrency } from "@/lib/formatCurrency";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 const statusColor = (label: string) => {
   switch (label) {
@@ -27,11 +35,52 @@ const approvalIcon = (status: string) => {
   }
 };
 
+const formatDate = (iso: string) => {
+  const d = new Date(iso);
+  return d.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
+const ReportSummary = ({ entry }: { entry: HistoryEntry }) => {
+  const input = entry.assessmentInput as Record<string, unknown>;
+  return (
+    <div className="space-y-1 text-xs">
+      <div className="flex items-center gap-2">
+        <span className="font-heading text-lg font-bold text-foreground">{entry.creditScore}</span>
+        <span className="text-muted-foreground">/ 850</span>
+        <Badge variant="outline" className={`ml-1 rounded-md px-2 py-0.5 text-[10px] font-semibold ${statusColor(entry.statusLabel)}`}>
+          {entry.statusLabel}
+        </Badge>
+        <span className="flex items-center gap-1 text-muted-foreground">
+          {approvalIcon(entry.approvalStatus)}
+          {entry.approvalStatus}
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-muted-foreground">
+        <span>Default: <strong className="text-foreground">{entry.probabilityOfDefault}%</strong></span>
+        <span>CIBIL: <strong className="text-foreground">{String(input.cibilScore ?? "—")}</strong></span>
+        <span>Income: <strong className="text-foreground">{formatCurrency(Number(input.annualIncome ?? 0))}</strong></span>
+        <span>Loan: <strong className="text-foreground">{formatCurrency(Number(input.loanAmount ?? 0))}</strong></span>
+        <span>Purpose: <strong className="text-foreground">{String(input.loanPurpose ?? "—")}</strong></span>
+      </div>
+      {entry.aiInsights && entry.aiInsights.length > 0 && (
+        <p className="text-muted-foreground italic truncate max-w-md" title={entry.aiInsights[0]}>
+          💡 {entry.aiInsights[0]}
+        </p>
+      )}
+    </div>
+  );
+};
+
 const HistoryPage = () => {
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -48,19 +97,8 @@ const HistoryPage = () => {
     load();
   }, []);
 
-  const formatDate = (iso: string) => {
-    const d = new Date(iso);
-    return d.toLocaleDateString("en-IN", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
   return (
-    <div className="container mx-auto max-w-4xl px-4 py-12">
+    <div className="container mx-auto max-w-5xl px-4 py-12">
       {/* Header */}
       <div className="mb-10 text-center animate-fade-in-up">
         <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl gradient-primary shadow-glow">
@@ -105,140 +143,37 @@ const HistoryPage = () => {
         </Card>
       )}
 
-      {/* History List */}
+      {/* History Table */}
       {!loading && entries.length > 0 && (
-        <div className="space-y-4">
-          {entries.map((entry) => {
-            const isExpanded = expandedId === entry.id;
-            const input = entry.assessmentInput as Record<string, unknown>;
-
-            return (
-              <Card
-                key={entry.id}
-                className="border-border/50 shadow-elevated transition-all hover:shadow-lg cursor-pointer"
-                onClick={() => setExpandedId(isExpanded ? null : entry.id)}
-              >
-                <CardHeader className="pb-3">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent">
-                        <User className="h-5 w-5 text-accent-foreground" />
-                      </div>
-                      <div>
-                        <CardTitle className="text-base font-semibold text-foreground">
-                          {entry.userName}
-                        </CardTitle>
-                        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <Calendar className="h-3 w-3" />
-                          {formatDate(entry.createdAt)}
-                        </div>
-                      </div>
+        <Card className="border-border/50 shadow-elevated overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/50">
+                <TableHead className="font-semibold">User Name</TableHead>
+                <TableHead className="font-semibold">Date Taken</TableHead>
+                <TableHead className="font-semibold">Report Summary</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {entries.map((entry) => (
+                <TableRow key={entry.id} className="hover:bg-accent/30 transition-colors">
+                  <TableCell className="font-medium text-foreground whitespace-nowrap align-top pt-4">
+                    {entry.userName}
+                  </TableCell>
+                  <TableCell className="whitespace-nowrap text-muted-foreground align-top pt-4">
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="h-3.5 w-3.5" />
+                      {formatDate(entry.createdAt)}
                     </div>
-
-                    <div className="flex items-center gap-3">
-                      {/* Credit Score */}
-                      <div className="text-right">
-                        <p className="font-heading text-2xl font-bold text-foreground">
-                          {entry.creditScore}
-                        </p>
-                        <p className="text-xs text-muted-foreground">/ 850</p>
-                      </div>
-
-                      {/* Status badge */}
-                      <Badge
-                        variant="outline"
-                        className={`rounded-lg px-3 py-1 text-xs font-semibold ${statusColor(entry.statusLabel)}`}
-                      >
-                        {entry.statusLabel}
-                      </Badge>
-
-                      {/* Approval */}
-                      <div className="flex items-center gap-1">
-                        {approvalIcon(entry.approvalStatus)}
-                        <span className="text-xs font-medium text-muted-foreground">
-                          {entry.approvalStatus}
-                        </span>
-                      </div>
-
-                      {isExpanded ? (
-                        <ChevronUp className="h-5 w-5 text-muted-foreground" />
-                      ) : (
-                        <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                      )}
-                    </div>
-                  </div>
-                </CardHeader>
-
-                {isExpanded && (
-                  <CardContent className="border-t border-border/50 pt-4">
-                    <div className="grid gap-6 md:grid-cols-2">
-                      {/* Key Metrics */}
-                      <div>
-                        <h4 className="mb-3 text-sm font-semibold text-foreground">Key Metrics</h4>
-                        <div className="space-y-2 text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Default Probability</span>
-                            <span className="font-semibold text-foreground">
-                              {entry.probabilityOfDefault}%
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">CIBIL Score</span>
-                            <span className="font-semibold text-foreground">
-                              {String(input.cibilScore ?? "—")}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Annual Income</span>
-                            <span className="font-semibold text-foreground">
-                              {formatCurrency(Number(input.annualIncome ?? 0))}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Loan Amount</span>
-                            <span className="font-semibold text-foreground">
-                              {formatCurrency(Number(input.loanAmount ?? 0))}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Loan Purpose</span>
-                            <span className="font-semibold text-foreground">
-                              {String(input.loanPurpose ?? "—")}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* AI Insights */}
-                      <div>
-                        <h4 className="mb-3 text-sm font-semibold text-foreground">AI Insights</h4>
-                        {entry.aiInsights && entry.aiInsights.length > 0 ? (
-                          <ul className="space-y-2">
-                            {entry.aiInsights.map((tip, i) => (
-                              <li
-                                key={i}
-                                className="flex gap-2 text-sm text-muted-foreground"
-                              >
-                                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
-                                  {i + 1}
-                                </span>
-                                {tip}
-                              </li>
-                            ))}
-                          </ul>
-                        ) : (
-                          <p className="text-sm text-muted-foreground">
-                            No AI insights for this assessment.
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                )}
-              </Card>
-            );
-          })}
-        </div>
+                  </TableCell>
+                  <TableCell>
+                    <ReportSummary entry={entry} />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Card>
       )}
     </div>
   );
