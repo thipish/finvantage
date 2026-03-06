@@ -24,8 +24,6 @@ const AdminDashboard = () => {
   const { user, assessments, totalExpenses } = useApp();
   const [search, setSearch] = useState("");
 
-  if (user?.role !== "admin") return <Navigate to="/" replace />;
-
   const totalUsers = new Set(assessments.map((a) => a.userEmail)).size;
   const approvedCount = assessments.filter((a) => a.status === "Approved").length;
   const approvalRate = assessments.length ? Math.round((approvedCount / assessments.length) * 100) : 0;
@@ -41,6 +39,8 @@ const AdminDashboard = () => {
     () => assessments.filter((a) => a.userEmail.toLowerCase().includes(search.toLowerCase())),
     [assessments, search]
   );
+
+  if (user?.role !== "admin") return <Navigate to="/" replace />;
 
   return (
     <div className="space-y-6 animate-fade-in-up">
